@@ -8,6 +8,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import co.wethinkcode.trafficflow.mq.HeartbeatPublisher;
 
 public class IntersectionServiceApp {
 
@@ -44,6 +45,8 @@ public class IntersectionServiceApp {
             return;
         }
 
+        HeartbeatPublisher heartbeatPublisher = new HeartbeatPublisher();
+        heartbeatPublisher.start();
         Javalin app = Javalin.create().start(PORT);
 
         app.get("/health", ctx -> ctx.result("OK"));
