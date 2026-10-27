@@ -2,18 +2,41 @@ package co.wethinkcode.trafficflow;
 
 import io.javalin.Javalin;
 
+import java.util.Map;
+
 public class IntersectionWatchdogApp {
 
     public static void main(String[] args) {
+        HeartbeatListener heartbeatListener = new HeartbeatListener();
+
+        try {
+            heartbeatListener.start();
+        } catch (Exception e) {
+            System.err.println(
+                    "Could not start heartbeat listener: " + e.getMessage()
+            );
+            return;
+        }
+
         Javalin app = Javalin.create().start(7024);
 
         app.get("/health", ctx -> ctx.result("OK"));
 
-        // TODO (Cries for help if the Intersection Service crashes, since routes can no longer be validated.)
-        // Mechanism: ActiveMQ Queue heartbeat/dead-letter
+        app.get("/status", ctx -> {
+            boolean missing = heartbeatListener.isHeartbeatMissing();
+
+            if (missing) {
+                ctx.status(503);
+                ctx.json(Map.of(
+                        "status", "DOWN",
+                        "message", "No recent heartbeat from Intersection Service"
+                ));
+            } else {
+                ctx.json(Map.of(
+                        "status", "UP",
+                        "message", "Intersection Service heartbeat is being received"
+                ));
+            }
+        });
     }
 }
-
-// MQ TODO: subscribes to ActiveMQ queue MqConfig.HEARTBEAT_QUEUE at MqConfig.BROKER_URL
-// (see co.wethinkcode.trafficflow.mq.MqConfig) and alerts if a heartbeat from
-// intersection-service is missed or a message lands in the dead-letter queue.
