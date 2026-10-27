@@ -1,164 +1,306 @@
+
 # TrafficFlow
 
-## Overview
+TrafficFlow is a Java-based urban traffic management project that models road intersections, congestion levels, and estimated travel times. It uses multiple REST services and ActiveMQ messaging to demonstrate communication between independent services.
 
-Urban traffic light control and congestion-based routing.
+## Project Status
 
-Domain entities: intersections, districts, signal types.
+| Stage | Description | Status |
+|---|---|---|
+| Stage 1 | Clean legacy intersection CSV data | Implemented |
+| Stage 2 | Create REST services and synchronous communication | Implemented |
+| Stage 3 | Use ActiveMQ to send congestion updates asynchronously | Implemented |
+| Stage 4 | Monitor Intersection Service using heartbeats | Partially implemented |
 
-Every class in this repo lives in a single flat package, `co.wethinkcode.trafficflow`. TrafficFlow is built
-as a small set of independent services, following a growth path from simple data
-cleanup through synchronous REST calls to asynchronous MQ decoupling and alerting:
+Stage 4 currently detects missing heartbeats. Dead-letter queue monitoring has not yet been implemented.
 
-1. clean a messy legacy CSV export (`intersections-legacy.csv`) — handled by **IngestionServiceApp**
-2. serve it up and act on it, via three REST services calling each other directly
-   over HTTP
-3. decouple the relevant services with an ActiveMQ topic (`congestion-topic`) instead of
-   direct calls — shared broker setup lives in [`common/`](common)
-4. raise the alarm on failure — handled by **IntersectionWatchdogApp**
+## Architecture
 
-| Service | Folder | Port | Role |
-|---|---|---|---|
-| IngestionServiceApp | [`ingestion-service/`](ingestion-service) | 7020 | Parses and cleans `intersections-legacy.csv` |
-| IntersectionServiceApp | [`intersection-service/`](intersection-service) | 7021 | Validates intersection/district names (source of truth). |
-| CongestionServiceApp | [`congestion-service/`](congestion-service) | 7022 | Tracks the city-wide Congestion Level (0-8). |
-| RoutingServiceApp | [`routing-service/`](routing-service) | 7023 | Provides estimated travel times based on congestion and intersection. |
-| IntersectionWatchdogApp | [`intersection-watchdog/`](intersection-watchdog) | 7024 | cries for help if the Intersection Service crashes, since routes can no longer be validated. |
+```text
+Ingestion Service (:7020)
+        |
+        | REST: GET /intersections
+        v
+Intersection Service (:7021)
+        |
+        | REST: GET /intersections/{id}
+        v
+Routing Service (:7023)
+        ^
+        | ActiveMQ topic: congestion-topic
+        |
+Congestion Service (:7022)
 
-Plus [`common/`](common) (no port) — the shared ActiveMQ broker and MQ config notes
-for `congestion-topic`: Routing Service becomes aware of congestion changes via an ActiveMQ Topic instead of querying Congestion Service directly.
 
-**Status:** scaffold only — build files, Javalin bootstrap, and TODOs are in place; no
-business logic has been implemented yet.
-
-## Your task
-
-Build out the four stages below, roughly in order — each stage builds on the last.
-Stages 1-2 are the core exercise; stages 3-4 are stretch goals if you have time left.
-Exact field names and response shapes are your call throughout — see
-"Integration contracts" below for illustrative shapes, not a spec to match exactly.
-
-| Stage | What | Required? | Rough effort |
-|---|---|---|---|
-| 1 | Clean `intersections-legacy.csv` in **IngestionServiceApp** and expose the cleaned records (see [`ingestion-service/README.md`](ingestion-service) for the specific data issues to handle) | Required | 1-2 hrs |
-| 2 | Implement the domain endpoints in **IntersectionServiceApp**, **CongestionServiceApp**, and **RoutingServiceApp**, wired together with direct synchronous REST calls | Required | 2-3 hrs |
-| 3 | Decouple Congestion → Routing with the `congestion-topic` ActiveMQ topic instead of a direct REST call (see [`common/README.md`](common)) | Stretch | 1 hr |
-| 4 | Add heartbeat/dead-letter alerting in **IntersectionWatchdogApp** so it notices when the Intersection Service goes down | Stretch | 1 hr |
-
-(Effort is a rough guide, not a hard budget — go with what feels right for your pace.)
-
-## Integration contracts
-
-Every place one service calls or messages another, with an illustrative shape.
-None of these field names are binding — match the intent, not the exact JSON.
-
-| From → To | Stage | Mechanism | Shape |
-|---|---|---|---|
-| ingestion-service → intersection-service | 1 | REST, `GET` | `GET /intersections` on ingestion-service (port 7020) → `200 OK` + JSON array of cleaned records, e.g. `[{"id": "INT-1001", "district": "Downtown", "signalType": "4-way", "active": true}, ...]`. intersection-service loads this as its canonical list. |
-| routing-service → intersection-service | 2 | REST, `GET` | `GET /intersections/{id}` on intersection-service (port 7021) → `200 OK` with the record, or `404` if the id/district isn't recognized. routing-service calls this to validate a route's endpoints before estimating travel time. |
-| routing-service → congestion-service | 2 | REST, `GET` | `GET /congestion` on congestion-service (port 7022) → `200 OK` + `{"level": 0-8}`. routing-service polls this per-request in stage 2. |
-| congestion-service → routing-service | 3 | ActiveMQ Topic `congestion-topic` | Once stage 3 is in place, congestion-service publishes `{"level": 0-8}` to `congestion-topic` whenever the level changes, and routing-service subscribes instead of polling `GET /congestion`. Broker URL + topic name come from the shared `MqConfig` class — see [`common/README.md`](common). |
-| intersection-service → intersection-watchdog | 4 | ActiveMQ Queue `intersection-heartbeat-queue` | intersection-service publishes a periodic heartbeat message to `intersection-heartbeat-queue`; intersection-watchdog consumes it and raises an alert (e.g. logs, or its own `/alert` state) if a heartbeat is missed or lands in the dead-letter queue. Queue name comes from the shared `MqConfig` class, same pattern as `congestion-topic` — see [`intersection-watchdog/README.md`](intersection-watchdog). |
-
-## Project structure
-
+Intersection Service
+        |
+        | ActiveMQ queue:
+        | intersection-heartbeat-queue
+        v
+Intersection Watchdog (:7024)
 ```
-trafficflow/
-├── README.md
-├── .gitignore
-├── ingestion-service/          (port 7020)
-│   ├── pom.xml
-│   ├── README.md
-│   └── src/main/
-│       ├── java/co/wethinkcode/trafficflow/IngestionServiceApp.java
-│       └── resources/intersections-legacy.csv
-├── intersection-service/          (port 7021)
-├── congestion-service/          (port 7022)
-├── routing-service/          (port 7023)
+
+The Routing Service retrieves intersection details through REST and receives congestion updates through ActiveMQ. It calculates a simplified estimated travel time based on the current congestion level.
+
+## Services and Ports
+
+| Service | Directory | Port | Responsibility |
+|---|---|---:|---|
+| Ingestion Service | `ingestion-service/` | 7020 | Reads and exposes cleaned intersection data. |
+| Intersection Service | `intersection-service/` | 7021 | Loads intersection data and provides individual intersection lookups. Publishes heartbeats. |
+| Congestion Service | `congestion-service/` | 7022 | Stores congestion levels and publishes updates. |
+| Routing Service | `routing-service/` | 7023 | Looks up intersections and estimates travel time. |
+| Intersection Watchdog | `intersection-watchdog/` | 7024 | Monitors Intersection Service heartbeats. |
+| ActiveMQ Broker | `common/` | 61616 | Enables asynchronous communication between services. |
+
+The ActiveMQ web console is available on port `8161`.
+
+Each service is an independent Maven project with its own `pom.xml`. There is no root parent or aggregator POM.
+
+## Technology Stack
+
+- Java 17+
+- Maven 3.8+
+- Javalin
+- Jackson
+- OpenCSV
+- ActiveMQ Classic
+- Docker Compose
+
+## Integration Contracts
+
+### REST Endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `http://localhost:7020/health` | Checks Ingestion Service health. |
+| GET | `http://localhost:7020/intersections` | Returns cleaned intersection records. |
+| GET | `http://localhost:7021/health` | Checks Intersection Service health. |
+| GET | `http://localhost:7021/intersections/{id}` | Retrieves an intersection by ID. |
+| GET | `http://localhost:7022/health` | Checks Congestion Service health. |
+| GET | `http://localhost:7022/congestion` | Returns the current congestion level. |
+| PUT | `http://localhost:7022/congestion` | Updates the congestion level. |
+| GET | `http://localhost:7023/health` | Checks Routing Service health. |
+| GET | `http://localhost:7023/route?from=INT-1001&to=INT-1002` | Estimates travel time between two intersections. |
+| GET | `http://localhost:7024/health` | Checks Watchdog health. |
+| GET | `http://localhost:7024/status` | Reports whether recent heartbeats are being received. |
+
+### ActiveMQ Topic: `congestion-topic`
+
+- **Producer:** Congestion Service
+- **Consumer:** Routing Service
+- **Payload:** `{"level": 0}` through `{"level": 8}`
+
+The Congestion Service publishes a message when the congestion level changes. The Routing Service subscribes to the topic instead of polling the Congestion Service for every route request.
+
+### ActiveMQ Queue: `intersection-heartbeat-queue`
+
+- **Producer:** Intersection Service
+- **Consumer:** Intersection Watchdog
+- **Frequency:** Approximately every five seconds
+
+The Watchdog reports `DOWN` if no heartbeat has been received for more than 15 seconds.
+
+The broker URL used by the services is `tcp://localhost:61616`.
+
+## Project Structure
+
+```text
+sin-002-trafficflow/
 ├── common/
 │   ├── docker-compose.yml
 │   └── README.md
-└── intersection-watchdog/          (port 7024)
+├── ingestion-service/
+│   ├── pom.xml
+│   └── src/
+├── intersection-service/
+│   ├── pom.xml
+│   └── src/
+├── congestion-service/
+│   ├── pom.xml
+│   └── src/
+├── routing-service/
+│   ├── pom.xml
+│   └── src/
+├── intersection-watchdog/
+│   ├── pom.xml
+│   └── src/
+└── README.md
 ```
+
+Most Java classes use the `co.wethinkcode.trafficflow` package. Some messaging and client classes use subpackages such as `mq` and `client`.
 
 ## Build
 
-Requirements: Java 17+, Maven 3.8+, Docker (for the broker in `common/`).
+Build each service from its own directory.
 
-Every folder here (`ingestion-service/`, each domain service, and `intersection-watchdog/`) is
-an **independent** Maven project — there is no parent/aggregator pom. Build one at a
-time, e.g.:
-
+```bash
+cd ingestion-service && mvn clean package
+cd ../intersection-service && mvn clean package
+cd ../congestion-service && mvn clean package
+cd ../routing-service && mvn clean package
+cd ../intersection-watchdog && mvn clean package
 ```
-cd intersection-service
-mvn package
-```
 
-...or build every module in the repo in one pass from the project root:
+Alternatively, build all five Maven projects from the repository root:
 
-```
+```bash
 find . -name pom.xml -execdir mvn -q package \;
 ```
 
-## Run
+Each service produces an executable JAR inside its `target/` directory.
 
-```
-# ingestion
-cd ingestion-service && mvn package && java -jar target/ingestion-service.jar
+## Running the System
 
-# domain services, each in its own terminal
-# terminal 1
-cd intersection-service && mvn package && java -jar target/intersection-service.jar
-# terminal 2
-cd congestion-service && mvn package && java -jar target/congestion-service.jar
-# terminal 3
-cd routing-service && mvn package && java -jar target/routing-service.jar
+Start ActiveMQ before starting the services.
 
-# MQ broker (needed once the MQ-aware services above are wired up)
-cd common && docker compose up -d
+### 1. Start ActiveMQ
 
-# alerting
-cd intersection-watchdog && mvn package && java -jar target/intersection-watchdog.jar
+From the repository root:
+
+```bash
+cd common
+docker compose up -d
+docker compose ps
+cd ..
 ```
 
-| Service | Port |
-|---|---|
-| IngestionServiceApp (`ingestion-service`) | 7020 |
-| IntersectionServiceApp (`intersection-service`) | 7021 |
-| CongestionServiceApp (`congestion-service`) | 7022 |
-| RoutingServiceApp (`routing-service`) | 7023 |
-| IntersectionWatchdogApp (`intersection-watchdog`) | 7024 |
+The broker listens on `tcp://localhost:61616`.
 
-## Test
+### 2. Start Ingestion Service
 
-No automated tests exist yet (this is a scaffold). Each running service exposes
-`/health`, so sanity-check manually:
+In a terminal:
 
-```
-curl http://localhost:7020/health   # -> OK
+```bash
+cd ingestion-service
+java -jar target/ingestion-service.jar
 ```
 
-To add real tests to a module, add JUnit 5 and Surefire to its `pom.xml`:
+### 3. Start Intersection Service
 
-```xml
-<dependency>
-  <groupId>org.junit.jupiter</groupId>
-  <artifactId>junit-jupiter</artifactId>
-  <version>5.10.2</version>
-  <scope>test</scope>
-</dependency>
+Open another terminal:
+
+```bash
+cd intersection-service
+java -jar target/intersection-service.jar
 ```
 
-```xml
-<plugin>
-  <groupId>org.apache.maven.plugins</groupId>
-  <artifactId>maven-surefire-plugin</artifactId>
-  <version>3.2.5</version>
-</plugin>
+This service loads intersection records from the Ingestion Service during startup.
+
+### 4. Start Congestion Service
+
+Open another terminal:
+
+```bash
+cd congestion-service
+java -jar target/congestion-service.jar
 ```
 
-then add tests under that module's `src/test/java/...` and run:
+### 5. Start Routing Service
 
+Open another terminal:
+
+```bash
+cd routing-service
+java -jar target/routing-service.jar
 ```
-mvn test
+
+### 6. Start Intersection Watchdog
+
+Open another terminal:
+
+```bash
+cd intersection-watchdog
+java -jar target/intersection-watchdog.jar
 ```
+
+Keep each service running in its own terminal.
+
+## Testing the Endpoints
+
+### Health Checks
+
+```bash
+curl http://localhost:7020/health
+curl http://localhost:7021/health
+curl http://localhost:7022/health
+curl http://localhost:7023/health
+curl http://localhost:7024/health
+```
+
+Each health endpoint should return:
+
+```text
+OK
+```
+
+### Retrieve Intersections
+
+```bash
+curl http://localhost:7020/intersections
+```
+
+### Retrieve an Individual Intersection
+
+```bash
+curl http://localhost:7021/intersections/INT-1001
+```
+
+Replace `INT-1001` with an ID that exists in the intersection data.
+
+### Update Congestion
+
+```bash
+curl -i -X PUT http://localhost:7022/congestion \
+  -H "Content-Type: application/json" \
+  -d '{"level":4}'
+```
+
+Valid congestion levels range from `0` to `8`.
+
+When the level changes, the Congestion Service publishes an update to ActiveMQ. The Routing Service receives the update through `congestion-topic`.
+
+To retrieve the current level:
+
+```bash
+curl http://localhost:7022/congestion
+```
+
+### Request a Route Estimate
+
+```bash
+curl -i "http://localhost:7023/route?from=INT-1001&to=INT-1002"
+```
+
+Use two existing, active intersection IDs.
+
+The current estimated travel time formula is:
+
+```text
+estimated travel time = 10 + (congestion level × 5) minutes
+```
+
+For example, congestion level `4` produces an estimated travel time of `30` minutes.
+
+This is a simplified demonstration formula, not a real-time traffic prediction or a full road-network routing algorithm.
+
+### Check Watchdog Status
+
+```bash
+curl -i http://localhost:7024/status
+```
+
+When heartbeats are arriving, the Watchdog reports `UP`.
+
+If the Intersection Service stops sending heartbeats and the timeout passes, the Watchdog reports `DOWN` with HTTP status `503`.
+
+## Current Limitations
+
+- Travel time is calculated using a simplified formula.
+- The Watchdog monitors missed heartbeats but does not yet monitor dead-letter queues.
+- Automated test coverage has not yet been added.
+- Service-specific documentation still needs to be aligned with the latest implementation.
+
+## Domain Concepts
+
+TrafficFlow models road intersections, districts, and signal types. The current routing endpoint focuses on intersection IDs, active status, congestion levels, and estimated travel time.
