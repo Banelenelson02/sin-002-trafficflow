@@ -299,7 +299,6 @@ If the Intersection Service stops sending heartbeats and the timeout passes, the
 - Travel time is calculated using a simplified formula.
 - The Watchdog monitors missed heartbeats but does not yet monitor dead-letter queues.
 - Automated test coverage has not yet been added.
-- Service-specific documentation still needs to be aligned with the latest implementation.
 
 ## Domain Concepts
 
