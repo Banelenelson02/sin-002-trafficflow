@@ -10,9 +10,12 @@ TrafficFlow is a Java-based urban traffic management project that models road in
 | Stage 1 | Clean legacy intersection CSV data | Implemented |
 | Stage 2 | Create REST services and synchronous communication | Implemented |
 | Stage 3 | Use ActiveMQ to send congestion updates asynchronously | Implemented |
-| Stage 4 | Monitor Intersection Service using heartbeats | Partially implemented |
+| Stage 4 | Monitor Intersection Service using heartbeats and DLQ failures | Implemented |
 
-Stage 4 currently detects missing heartbeats. Dead-letter queue monitoring has not yet been implemented.
+Stage 4 detects both missing and malformed marked heartbeats. The watchdog
+commits valid heartbeats, rolls back malformed ones, and ActiveMQ retries a
+failed message once before routing it to `ActiveMQ.DLQ`. A later valid
+heartbeat clears the watchdog's DLQ alert.
 
 ## Architecture
 
@@ -21,26 +24,22 @@ Ingestion Service (:7020)
         |
         | REST: GET /intersections
         v
-Intersection Service (:7021)
+Intersection Service (:7021) <--- REST: GET /intersections/{id} --- Routing Service (:7023)
+        |                                                               ^
+        | heartbeat queue                                                 | congestion-topic
+        v                                                               |
+ActiveMQ Broker (:61616) <--- congestion-topic --- Congestion Service (:7022)
         |
-        | REST: GET /intersections/{id}
-        v
-Routing Service (:7023)
-        ^
-        | ActiveMQ topic: congestion-topic
-        |
-Congestion Service (:7022)
-
-
-Intersection Service
-        |
-        | ActiveMQ queue:
         | intersection-heartbeat-queue
         v
 Intersection Watchdog (:7024)
+        |
+        | malformed marked heartbeat: rollback -> one retry
+        v
+ActiveMQ.DLQ -- trafficflowMessageType=heartbeat --> Watchdog DLQ consumer
 ```
 
-The Routing Service retrieves intersection details through REST and receives congestion updates through ActiveMQ. It calculates a simplified estimated travel time based on the current congestion level.
+The Routing Service retrieves intersection details through REST and receives congestion updates through ActiveMQ. It calculates a simplified estimated travel time based on the current city-wide congestion level; it does not perform road-network routing.
 
 ## Services and Ports
 
@@ -99,7 +98,9 @@ The Congestion Service publishes a message when the congestion level changes. Th
 - **Consumer:** Intersection Watchdog
 - **Frequency:** Approximately every five seconds
 
-The Watchdog reports `DOWN` if no heartbeat has been received for more than 15 seconds.
+Heartbeats are marked with `trafficflowMessageType=heartbeat`. The watchdog uses a transacted JMS session: valid heartbeats are committed, while malformed marked heartbeats are rolled back. ActiveMQ retries them once and then routes them to `ActiveMQ.DLQ`. The DLQ consumer uses the same marker, so unrelated dead-letter messages do not change watchdog status.
+
+The Watchdog reports `DOWN` if no heartbeat has been received for more than 15 seconds or if it detects a dead-lettered marked heartbeat. A subsequent valid heartbeat clears the DLQ alert.
 
 The broker URL used by the services is `tcp://localhost:61616`.
 
@@ -149,6 +150,26 @@ find . -name pom.xml -execdir mvn -q package \;
 ```
 
 Each service produces an executable JAR inside its `target/` directory.
+
+## Automated Tests
+
+The repository contains five independent Maven projects; run each module's tests separately from the repository root:
+
+```bash
+mvn -f ingestion-service/pom.xml test
+mvn -f intersection-service/pom.xml test
+mvn -f congestion-service/pom.xml test
+mvn -f routing-service/pom.xml test
+mvn -f intersection-watchdog/pom.xml test
+```
+
+The watchdog's real-broker DLQ test is opt-in because it requires ActiveMQ:
+
+```bash
+mvn -f intersection-watchdog/pom.xml test -Dtrafficflow.integrationTests=true
+```
+
+The default test run contains unit tests. The opt-in test verifies malformed heartbeat retry and DLQ detection against a running broker.
 
 ## Running the System
 
@@ -296,9 +317,9 @@ If the Intersection Service stops sending heartbeats and the timeout passes, the
 
 ## Current Limitations
 
-- Travel time is calculated using a simplified formula.
-- The Watchdog monitors missed heartbeats but does not yet monitor dead-letter queues.
-- Automated test coverage has not yet been added.
+- Congestion is a city-wide integer from `0` to `8`, not a road-specific measurement.
+- Travel time uses `10 + (congestion level × 5)` minutes; it is not road-network routing or a real-time traffic prediction.
+- The watchdog's broker-backed DLQ test requires a locally running ActiveMQ broker.
 
 ## Domain Concepts
 
