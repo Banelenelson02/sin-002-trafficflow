@@ -14,6 +14,7 @@ public class CongestionServiceApp {
 
     public static void main(String[] args) {
         AtomicInteger currentLevel = new AtomicInteger(0);
+        CongestionPublisher publisher = new CongestionPublisher();
 
         Javalin app = Javalin.create().start(PORT);
 
@@ -39,10 +40,26 @@ public class CongestionServiceApp {
                 return;
             }
 
-            currentLevel.set(level);
+            int previousLevel = currentLevel.getAndSet(level);
+
+            if (previousLevel != level) {
+                try {
+                    publisher.publish(level);
+                } catch (Exception e) {
+                    System.err.println(
+                            "Failed to publish congestion update: "
+                                    + e.getMessage()
+                    );
+                    ctx.status(502);
+                    ctx.json(Map.of(
+                            "error",
+                            "Could not publish congestion update"
+                    ));
+                    return;
+                }
+            }
 
             ctx.json(new Congestion(currentLevel.get()));
         });
     }
 }
-
