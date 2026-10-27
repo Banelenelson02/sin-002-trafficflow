@@ -10,8 +10,9 @@ import javax.jms.Session;
 import javax.jms.Topic;
 import javax.jms.TextMessage;
 
-public class CongestionPublisher {
+public class CongestionPublisher implements CongestionMessagePublisher {
 
+    @Override
     public void publish(int level) throws Exception {
         ActiveMQConnectionFactory factory =
                 new ActiveMQConnectionFactory(MqConfig.BROKER_URL);
