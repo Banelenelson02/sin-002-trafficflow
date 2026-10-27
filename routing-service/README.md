@@ -149,7 +149,7 @@ Ensure ActiveMQ and the Intersection Service are running when testing route requ
 
 ## Testing
 
-No automated tests are currently documented for this module. You can manually check the service using:
+The module includes `HttpClientsTest.java` and `MqConfigTest.java`. You can also manually check the running service using:
 
 ```bash
 curl -i http://localhost:7023/health
@@ -163,4 +163,4 @@ For integration testing, update the congestion level through the Congestion Serv
 - Travel time is calculated using a fixed formula rather than actual road distances.
 - The service does not model road networks, alternative routes, or turn-by-turn directions.
 - Estimates depend on the congestion level received by the service.
-- No automated tests are currently documented.
+- Automated test classes: `HttpClientsTest.java` and `MqConfigTest.java`.

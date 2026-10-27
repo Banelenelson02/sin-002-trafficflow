@@ -15,7 +15,7 @@ Part of the [TrafficFlow](../README.md) project.
 - Trim leading and trailing whitespace and normalize inconsistent values.
 - Convert missing or placeholder values into `null`.
 - Normalize intersection IDs, district names, signal types, and boolean flags.
-- Skip rows with too few columns or invalid/blank intersection IDs.
+- Skip rows with fewer than four columns or blank intersection IDs.
 - Remove duplicate records using normalized intersection IDs.
 - Fill missing fields in a record using available values from duplicate records.
 - Expose the cleaned data through REST endpoints.
@@ -29,7 +29,7 @@ The source CSV is deliberately messy. The service handles issues such as:
 - **Duplicate records** with IDs that differ only by casing.
 - **Missing or placeholder values**, including blank fields, `N/A`, `TBD`, `unknown`, `-`, and `NaN`.
 - **Inconsistent boolean representations**, including `Y`/`N`, `yes`/`no`, `1`/`0`, and `true`/`false`.
-- **Rows with insufficient columns** or invalid intersection IDs.
+- **Rows with insufficient columns** or blank intersection IDs.
 
 The current implementation does not parse or validate date formats, numeric counts, or naming and spelling variants beyond the normalization described above.
 
@@ -167,7 +167,7 @@ java -jar ingestion-service/target/ingestion-service.jar
 
 ## Testing
 
-No automated tests are currently documented for this module. You can manually verify the service using the following commands:
+Automated tests are available in `IntersectionCsvReaderTest.java`. You can also manually verify the running service using the following commands:
 
 ```bash
 curl -i http://localhost:7020/health
@@ -176,4 +176,4 @@ curl -i http://localhost:7020/intersections
 
 The health endpoint should return HTTP `200` with `OK`. The intersections endpoint should return HTTP `200` with the cleaned records in JSON format.
 
-Automated tests could be added later to cover whitespace normalization, placeholder handling, boolean conversion, duplicate merging, invalid rows, and missing CSV values.
+The CSV reader tests are located under `src/test/java/co/wethinkcode/trafficflow/`.

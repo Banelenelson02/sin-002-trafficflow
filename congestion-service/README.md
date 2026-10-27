@@ -114,7 +114,7 @@ Ensure the ActiveMQ broker is running if you want to test message publishing.
 
 ## Testing
 
-No automated tests are currently documented for this module. You can manually test the API using:
+The module includes `CongestionTest.java` and `CongestionControllerTest.java`. You can also manually test the API using:
 
 ```bash
 curl -i http://localhost:7022/health
@@ -145,4 +145,4 @@ To verify the integration, change the congestion level and check that a message 
 
 - The congestion level is a city-wide value rather than a measurement for each individual road.
 - Estimated travel times are simplified calculations, not predictions based on live traffic data.
-- No automated tests are currently documented.
+- Automated test classes: `CongestionTest.java` and `CongestionControllerTest.java`.

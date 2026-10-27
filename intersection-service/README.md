@@ -118,7 +118,7 @@ Ensure the ActiveMQ broker and Ingestion Service are running before starting it.
 
 ## Testing
 
-No automated tests are currently documented for this module. You can manually check the service using:
+The module includes `IntersectionClientTest.java`. You can also manually check the running service using:
 
 ```bash
 curl -i http://localhost:7021/health
@@ -138,4 +138,4 @@ curl -i http://localhost:7024/status
 - Intersection data is loaded at startup and cached in memory.
 - The service depends on the Ingestion Service being available when it loads its data.
 - The heartbeat is a simple liveness signal, not a check that every other service is healthy.
-- No automated tests are currently documented.
+- Automated test class: `IntersectionClientTest.java`.
