@@ -23,20 +23,12 @@ public class IntersectionWatchdogApp {
         app.get("/health", ctx -> ctx.result("OK"));
 
         app.get("/status", ctx -> {
-            boolean missing = heartbeatListener.isHeartbeatMissing();
-
-            if (missing) {
-                ctx.status(503);
-                ctx.json(Map.of(
-                        "status", "DOWN",
-                        "message", "No recent heartbeat from Intersection Service"
-                ));
-            } else {
-                ctx.json(Map.of(
-                        "status", "UP",
-                        "message", "Intersection Service heartbeat is being received"
-                ));
-            }
+            WatchdogStatus status = WatchdogStatus.from(heartbeatListener);
+            ctx.status(status.httpStatus());
+            ctx.json(Map.of(
+                    "status", status.status(),
+                    "message", status.message()
+            ));
         });
     }
 }

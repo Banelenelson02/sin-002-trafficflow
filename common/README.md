@@ -44,9 +44,13 @@ Example payload:
 Intersection service is alive
 ```
 
-The Intersection Service publishes a heartbeat approximately every five seconds. The Watchdog records the time of the latest received heartbeat and reports the service as `DOWN` if no heartbeat has arrived for more than 15 seconds.
+The Intersection Service publishes a persistent, marked heartbeat approximately every five seconds. The Watchdog records the time of the latest received heartbeat and reports the service as `DOWN` if no heartbeat has arrived for more than 15 seconds.
 
-**Note:** The Watchdog currently detects missed heartbeats. Dead-letter queue monitoring has not been implemented.
+The Watchdog validates marked heartbeats in a transacted JMS session. A malformed
+marked heartbeat is rolled back, retried once, and then handled by ActiveMQ's
+standard `ActiveMQ.DLQ` policy. Only dead-lettered messages with
+`trafficflowMessageType=heartbeat` affect the Watchdog status. A later valid
+heartbeat clears the DLQ alert.
 
 ## Project Structure
 
@@ -124,8 +128,14 @@ When heartbeats are being received, the response reports `UP`.
 
 To test the timeout, stop the Intersection Service and wait more than 15 seconds. Check `/status` again. The Watchdog should report `DOWN` with HTTP status `503`.
 
+To run the broker-backed DLQ integration test, with ActiveMQ running and no stale
+TrafficFlow heartbeat messages in `ActiveMQ.DLQ`:
+
+```bash
+mvn -f ../intersection-watchdog/pom.xml test -Dtrafficflow.integrationTests=true
+```
+
 ## Current Limitations
 
-- Dead-letter queue monitoring and related alerting have not been implemented.
 - The broker URL is configured for local development.
 - Messaging configuration is maintained in each independent service module rather than in a shared Java module.

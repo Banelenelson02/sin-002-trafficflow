@@ -54,7 +54,7 @@ The Intersection Service publishes heartbeat messages to the ActiveMQ queue `int
 
 The broker configuration is defined in the service's `mq/MqConfig.java` class. The ActiveMQ broker is configured through the Docker Compose setup in [`../common/`](../common).
 
-The Watchdog uses these heartbeat messages to determine whether the Intersection Service is responding.
+The Watchdog uses these heartbeat messages to determine whether the Intersection Service is responding. Each heartbeat is marked with `trafficflowMessageType=heartbeat`, allowing the Watchdog to identify only TrafficFlow heartbeat messages in ActiveMQ's `ActiveMQ.DLQ` queue.
 
 ## Dependencies
 

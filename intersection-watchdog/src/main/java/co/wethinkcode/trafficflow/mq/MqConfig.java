@@ -10,6 +10,10 @@ public final class MqConfig {
 
     public static final String BROKER_URL = "tcp://localhost:61616";
     public static final String HEARTBEAT_QUEUE = "intersection-heartbeat-queue";
+    public static final String DEAD_LETTER_QUEUE = "ActiveMQ.DLQ";
+    public static final String MESSAGE_TYPE_PROPERTY = "trafficflowMessageType";
+    public static final String HEARTBEAT_MESSAGE_TYPE = "heartbeat";
+    public static final int MAX_REDELIVERIES = 1;
 
     private MqConfig() {
     }

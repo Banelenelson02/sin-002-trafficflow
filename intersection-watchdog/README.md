@@ -13,6 +13,7 @@ Part of the [TrafficFlow](../README.md) project. This is an independent Maven mo
 
 - Subscribe to the ActiveMQ queue `intersection-heartbeat-queue`.
 - Track the most recently received heartbeat from the Intersection Service.
+- Detect heartbeats that ActiveMQ has dead-lettered after a processing failure.
 - Report the service as down if no heartbeat has been received or the latest heartbeat is too old.
 - Expose HTTP endpoints for health and monitoring status.
 
@@ -72,13 +73,26 @@ The broker configuration is defined in the service's `mq/MqConfig.java` class. A
 
 The Intersection Service publishes heartbeat messages periodically. The Watchdog uses the arrival of these messages to determine whether the service appears to be alive.
 
+The heartbeat consumer uses a transacted JMS session. It commits only valid
+`TextMessage` heartbeats and explicitly rolls back malformed marked heartbeats.
+The ActiveMQ client redelivery policy permits one redelivery, after which ActiveMQ
+sends a poison acknowledgement and the broker routes the persistent message to
+its built-in `ActiveMQ.DLQ` queue. The Watchdog's DLQ consumer has the same
+`trafficflowMessageType = 'heartbeat'` selector, so unrelated dead-lettered
+messages do not affect its status.
+
+Dead-letter alerts are recovery-aware rather than permanently latched: a valid
+subsequent heartbeat clears the DLQ alarm and restores `UP`. The dead-letter
+event remains in broker administration tools and the Watchdog logs.
+
 ## How monitoring works
 
 1. The Intersection Service publishes a heartbeat message to the queue approximately every five seconds.
 2. The Watchdog consumes the message and records the time of the latest heartbeat.
 3. The `/status` endpoint checks whether a heartbeat has been received recently.
 4. If no heartbeat has been received, or more than 15 seconds have elapsed since the latest heartbeat, the Watchdog reports `DOWN`.
-5. Otherwise, it reports `UP`.
+5. If ActiveMQ dead-letters a marked heartbeat, it reports `DOWN` with HTTP `503`.
+6. A later valid heartbeat clears that alert; otherwise, it reports `UP`.
 
 The Watchdog's status is based on heartbeat reception. It does not independently prove that every function of the Intersection Service is working correctly.
 
@@ -130,7 +144,21 @@ Ensure ActiveMQ is running and the Intersection Service is publishing heartbeats
 
 ## Testing
 
-No automated tests are currently documented for this module.
+Unit tests cover heartbeat validation, missing-heartbeat status, DLQ status, and
+recovery after a valid heartbeat:
+
+```bash
+mvn -f intersection-watchdog/pom.xml test
+```
+
+The real-broker integration test is intentionally skipped unless explicitly
+enabled. It sends a malformed marked heartbeat and verifies two delivery
+attempts (initial delivery plus one retry) and DLQ detection. Start a clean
+ActiveMQ broker first, then run:
+
+```bash
+mvn -f intersection-watchdog/pom.xml test -Dtrafficflow.integrationTests=true
+```
 
 Check the Watchdog's health and status:
 
@@ -148,6 +176,5 @@ Restart the Intersection Service and verify that the Watchdog begins receiving h
 ## Current limitations
 
 - The Watchdog monitors heartbeat messages, not every aspect of the Intersection Service's functionality.
-- Dead-letter queue monitoring is not implemented.
 - The status endpoint reports monitoring state through HTTP; a separate notification or alert delivery mechanism is not documented.
-- No automated tests are currently documented.
+- The DLQ integration test requires a locally running ActiveMQ broker and is not part of the default unit-test run.

@@ -21,7 +21,7 @@ public class HeartbeatPublisher {
             try {
                 ActiveMQConnectionFactory factory =
                         new ActiveMQConnectionFactory(
-                                "tcp://localhost:61616"
+                                MqConfig.BROKER_URL
                         );
 
                 try (Connection connection = factory.createConnection()) {
@@ -33,13 +33,17 @@ public class HeartbeatPublisher {
                     );
 
                     Queue queue = session.createQueue(
-                            "intersection-heartbeat-queue"
+                            MqConfig.HEARTBEAT_QUEUE
                     );
 
                     MessageProducer producer = session.createProducer(queue);
 
                     TextMessage message = session.createTextMessage(
                             "Intersection service is alive"
+                    );
+                    message.setStringProperty(
+                            MqConfig.MESSAGE_TYPE_PROPERTY,
+                            MqConfig.HEARTBEAT_MESSAGE_TYPE
                     );
 
                     producer.send(message);

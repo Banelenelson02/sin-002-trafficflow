@@ -10,5 +10,7 @@ class MqConfigTest {
     void exposesTheHeartbeatMessagingContract() {
         assertEquals("tcp://localhost:61616", MqConfig.BROKER_URL);
         assertEquals("intersection-heartbeat-queue", MqConfig.HEARTBEAT_QUEUE);
+        assertEquals("ActiveMQ.DLQ", MqConfig.DEAD_LETTER_QUEUE);
+        assertEquals(1, MqConfig.MAX_REDELIVERIES);
     }
 }
