@@ -1,79 +1,131 @@
+
 # common — Asynchronous Decoupling (MQ)
 
 ## Overview
 
-Part of the [TrafficFlow](../README.md) project. Holds the ActiveMQ broker shared
-by the services below — not a service itself, so it has no port of its own. Two
-independent integration points share this one broker:
+Part of the [TrafficFlow](../README.md) project. This directory contains the Docker Compose configuration for the ActiveMQ broker shared by the services below. It is not a service itself and does not have its own application port.
+
+The broker supports two asynchronous communication workflows:
+
+1. Congestion updates between the Congestion Service and Routing Service.
+2. Heartbeat messages between the Intersection Service and Intersection Watchdog.
 
 ### Topic: `congestion-topic`
 
-Routing Service becomes aware of congestion changes via an ActiveMQ Topic instead of querying Congestion Service directly.
+The Routing Service receives congestion updates through an ActiveMQ topic instead of polling the Congestion Service for every route request.
 
-- Producer: `congestion-service` (`../congestion-service`)
-- Consumer(s): `routing-service` (`../routing-service`)
+- **Producer:** `congestion-service` (`../congestion-service`)
+- **Consumer:** `routing-service` (`../routing-service`)
+- **Message format:** JSON
 
-Broker URL and topic name are shared via a common `co.wethinkcode.trafficflow.mq.MqConfig` class
-(`BROKER_URL`, `TOPIC`). It's identical in every participating service's own source
-tree — each service here is an independent Maven project with no shared parent pom,
-so the common package is duplicated rather than imported from one place.
+Example payload:
+
+```json
+{
+  "level": 4
+}
+```
+
+Congestion levels range from `0` to `8`. When the level changes, the Congestion Service publishes an update. The Routing Service subscribes to the topic and updates its current congestion level.
+
+Each independent Maven service maintains its own messaging configuration, including the broker URL and topic name.
 
 ### Queue: `intersection-heartbeat-queue`
 
-Intersection Watchdog notices when Intersection Service goes down by watching for
-missed heartbeats / dead-lettered messages instead of polling its `/health` endpoint.
+The Intersection Watchdog monitors heartbeats from the Intersection Service to detect when recent heartbeat messages stop arriving.
 
-- Producer: `intersection-service` (`../intersection-service`)
-- Consumer(s): `intersection-watchdog` (`../intersection-watchdog`)
+- **Producer:** `intersection-service` (`../intersection-service`)
+- **Consumer:** `intersection-watchdog` (`../intersection-watchdog`)
+- **Message format:** Plain text
 
-Broker URL and queue name are shared the same way, via each service's own copy of
-`co.wethinkcode.trafficflow.mq.MqConfig` (`BROKER_URL`, `HEARTBEAT_QUEUE`).
+Example payload:
 
-## Project structure
-
+```text
+Intersection service is alive
 ```
+
+The Intersection Service publishes a heartbeat approximately every five seconds. The Watchdog records the time of the latest received heartbeat and reports the service as `DOWN` if no heartbeat has arrived for more than 15 seconds.
+
+**Note:** The Watchdog currently detects missed heartbeats. Dead-letter queue monitoring has not been implemented.
+
+## Project Structure
+
+```text
 common/
 ├── docker-compose.yml
 └── README.md
 ```
 
-This folder holds the broker config and notes only — the actual publish/subscribe
-code belongs in the producer/consumer services listed above (their poms already
-depend on `activemq-client`, and each already has its own
-`src/main/java/co/wethinkcode/trafficflow/mq/MqConfig.java` with the constants for
-whichever topic/queue that service participates in).
+This directory contains the broker configuration and documentation. The actual message publishing and consuming code belongs to the participating services.
+
+Each service is an independent Maven project, so the relevant ActiveMQ dependencies and messaging configuration are maintained within the individual service modules.
 
 ## Build
 
-Nothing to build here directly — this folder just brings up the broker used by the
-services listed above.
+There is nothing to build directly in this directory. It is used to start the ActiveMQ broker required by the messaging services.
 
 ## Run
 
-```
+Start the broker from the `common/` directory:
+
+```bash
 docker compose up -d
 ```
 
-- Broker URL for clients: `tcp://localhost:61616`
-- Web console: http://localhost:8161 (default admin/admin)
+Check the container status:
 
-Then start the producer/consumer services as usual (`mvn package && java -jar ...`
-from their own directories at the project root).
+```bash
+docker compose ps
+```
+
+Follow the broker logs:
+
+```bash
+docker compose logs -f activemq
+```
+
+The broker uses the following local development endpoints:
+
+- **Broker URL:** `tcp://localhost:61616`
+- **Web console:** [http://localhost:8161](http://localhost:8161)
+
+Start ActiveMQ before launching the services that publish or consume messages.
 
 ## Test
 
+### Test congestion messaging
+
+1. Start ActiveMQ.
+2. Start the Congestion Service on port `7022`.
+3. Start the Routing Service on port `7023`.
+4. Change the congestion level:
+
+```bash
+curl -i -X PUT http://localhost:7022/congestion \
+  -H "Content-Type: application/json" \
+  -d '{"level":4}'
 ```
-docker compose ps          # confirm the broker container is healthy
+
+When the congestion level changes, the Congestion Service publishes a message to `congestion-topic`. Check the Routing Service logs for the received congestion update.
+
+### Test heartbeat monitoring
+
+1. Start ActiveMQ.
+2. Start the Ingestion Service on port `7020`.
+3. Start the Intersection Service on port `7021`.
+4. Start the Intersection Watchdog on port `7024`.
+5. Check the watchdog status:
+
+```bash
+curl -i http://localhost:7024/status
 ```
 
-Once the TODOs below are implemented, verify end-to-end by publishing a message from
-`congestion-service` and confirming the consumer(s) receive it — e.g. via logs, or by
-watching the topic in the web console.
+When heartbeats are being received, the response reports `UP`.
 
-## TODO
+To test the timeout, stop the Intersection Service and wait more than 15 seconds. Check `/status` again. The Watchdog should report `DOWN` with HTTP status `503`.
 
-- Add `activemq-client` publish logic to `congestion-service` on its stage/state-change endpoint.
-- Add `activemq-client` subscriber logic to consumer service(s) above, replacing any
-  direct synchronous calls to `congestion-service`.
-- Add `activemq-client` heartbeat-publish logic to `intersection-service`.
-- Add `activemq-client` subscriber/alerting logic to `intersection-watchdog`.
+## Current Limitations
+
+- Dead-letter queue monitoring and related alerting have not been implemented.
+- The broker URL is configured for local development.
+- Messaging configuration is maintained in each independent service module rather than in a shared Java module.
