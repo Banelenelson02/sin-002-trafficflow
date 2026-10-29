@@ -17,6 +17,18 @@ public class HeartbeatListener implements AutoCloseable {
     private static final String EXPECTED_HEARTBEAT =
             "Intersection service is alive";
 
+    private final String heartbeatQueue;
+    private final String heartbeatMessageType;
+
+    public HeartbeatListener() {
+        this(MqConfig.HEARTBEAT_QUEUE, MqConfig.HEARTBEAT_MESSAGE_TYPE);
+    }
+
+    HeartbeatListener(String heartbeatQueue, String heartbeatMessageType) {
+        this.heartbeatQueue = heartbeatQueue;
+        this.heartbeatMessageType = heartbeatMessageType;
+    }
+
     private final AtomicLong lastHeartbeat = new AtomicLong(0);
     private final AtomicLong lastDeadLetter = new AtomicLong(0);
     private final AtomicInteger invalidHeartbeatAttempts = new AtomicInteger(0);
@@ -43,7 +55,7 @@ public class HeartbeatListener implements AutoCloseable {
                 Session.SESSION_TRANSACTED
         );
 
-        Queue queue = heartbeatSession.createQueue(MqConfig.HEARTBEAT_QUEUE);
+        Queue queue = heartbeatSession.createQueue(heartbeatQueue);
         MessageConsumer consumer = heartbeatSession.createConsumer(
                 queue,
                 heartbeatSelector()
@@ -137,7 +149,7 @@ public class HeartbeatListener implements AutoCloseable {
 
     private String heartbeatSelector() {
         return MqConfig.MESSAGE_TYPE_PROPERTY + " = '"
-                + MqConfig.HEARTBEAT_MESSAGE_TYPE + "'";
+                + heartbeatMessageType + "'";
     }
 
     @Override
