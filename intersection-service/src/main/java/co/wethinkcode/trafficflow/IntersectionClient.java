@@ -1,3 +1,4 @@
+
 package co.wethinkcode.trafficflow;
 
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -12,22 +13,28 @@ import java.util.List;
 
 public class IntersectionClient {
 
-    private static final String INGESTION_URL =
+    private static final String DEFAULT_INGESTION_URL =
             "http://localhost:7020/intersections";
 
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
+    private final String ingestionUrl;
 
     public IntersectionClient() {
+        this(DEFAULT_INGESTION_URL);
+    }
+
+    public IntersectionClient(String ingestionUrl) {
         this.httpClient = HttpClient.newHttpClient();
         this.objectMapper = new ObjectMapper();
+        this.ingestionUrl = ingestionUrl;
     }
 
     public List<Intersection> fetchIntersections()
             throws IOException, InterruptedException {
 
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(INGESTION_URL))
+                .uri(URI.create(ingestionUrl))
                 .GET()
                 .build();
 
@@ -49,3 +56,4 @@ public class IntersectionClient {
         );
     }
 }
+

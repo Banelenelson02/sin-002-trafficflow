@@ -1,3 +1,4 @@
+
 package co.wethinkcode.trafficflow.client;
 
 import com.sun.net.httpserver.HttpExchange;
@@ -23,6 +24,7 @@ class HttpClientsTest {
         if (intersectionServer != null) {
             intersectionServer.stop(0);
         }
+
         if (congestionServer != null) {
             congestionServer.stop(0);
         }
@@ -30,10 +32,14 @@ class HttpClientsTest {
 
     @Test
     void returnsDeserializedIntersectionForSuccessfulResponse() throws Exception {
-        startIntersectionServer(200, "{\"id\":\"INT-1001\",\"district\":\"Downtown\","
-                + "\"signalType\":\"4-way\",\"active\":true}");
+        startIntersectionServer(
+                200,
+                "{\"id\":\"INT-1001\",\"district\":\"Downtown\","
+                        + "\"signalType\":\"4-way\",\"active\":true}"
+        );
 
-        var result = new IntersectionClient().getIntersection("INT-1001");
+        var result = new IntersectionClient(intersectionBaseUrl())
+                .getIntersection("INT-1001");
 
         assertEquals("INT-1001", result.id());
         assertEquals(true, result.active());
@@ -43,7 +49,10 @@ class HttpClientsTest {
     void returnsNullWhenIntersectionDoesNotExist() throws Exception {
         startIntersectionServer(404, "{\"error\":\"Intersection not found\"}");
 
-        assertNull(new IntersectionClient().getIntersection("UNKNOWN"));
+        assertNull(
+                new IntersectionClient(intersectionBaseUrl())
+                        .getIntersection("UNKNOWN")
+        );
     }
 
     @Test
@@ -52,17 +61,24 @@ class HttpClientsTest {
 
         RuntimeException exception = assertThrows(
                 RuntimeException.class,
-                () -> new IntersectionClient().getIntersection("INT-1001")
+                () -> new IntersectionClient(intersectionBaseUrl())
+                        .getIntersection("INT-1001")
         );
 
-        assertEquals("Intersection Service returned HTTP 500", exception.getMessage());
+        assertEquals(
+                "Intersection Service returned HTTP 500",
+                exception.getMessage()
+        );
     }
 
     @Test
     void returnsDeserializedCongestionForSuccessfulResponse() throws Exception {
         startCongestionServer(200, "{\"level\":6}");
 
-        assertEquals(6, new CongestionClient().getCongestion().level());
+        assertEquals(
+                6,
+                new CongestionClient(congestionUrl()).getCongestion().level()
+        );
     }
 
     @Test
@@ -71,29 +87,53 @@ class HttpClientsTest {
 
         RuntimeException exception = assertThrows(
                 RuntimeException.class,
-                () -> new CongestionClient().getCongestion()
+                () -> new CongestionClient(congestionUrl()).getCongestion()
         );
 
-        assertEquals("Congestion Service returned HTTP 503", exception.getMessage());
+        assertEquals(
+                "Congestion Service returned HTTP 503",
+                exception.getMessage()
+        );
     }
 
-    private void startIntersectionServer(int status, String body) throws IOException {
-        intersectionServer = startServer(7021, status, body);
+    private void startIntersectionServer(int status, String body)
+            throws IOException {
+        intersectionServer = startServer(0, status, body);
     }
 
-    private void startCongestionServer(int status, String body) throws IOException {
-        congestionServer = startServer(7022, status, body);
+    private void startCongestionServer(int status, String body)
+            throws IOException {
+        congestionServer = startServer(0, status, body);
     }
 
-    private HttpServer startServer(int port, int status, String body) throws IOException {
-        HttpServer server = HttpServer.create(new InetSocketAddress("localhost", port), 0);
+    private HttpServer startServer(int port, int status, String body)
+            throws IOException {
+        HttpServer server = HttpServer.create(
+                new InetSocketAddress("localhost", port),
+                0
+        );
+
         server.createContext("/", exchange -> respond(exchange, status, body));
         server.start();
+
         return server;
     }
 
-    private void respond(HttpExchange exchange, int status, String body) throws IOException {
+    private String intersectionBaseUrl() {
+        return "http://localhost:"
+                + intersectionServer.getAddress().getPort();
+    }
+
+    private String congestionUrl() {
+        return "http://localhost:"
+                + congestionServer.getAddress().getPort()
+                + "/congestion";
+    }
+
+    private void respond(HttpExchange exchange, int status, String body)
+            throws IOException {
         byte[] response = body.getBytes(StandardCharsets.UTF_8);
+
         exchange.sendResponseHeaders(status, response.length);
         exchange.getResponseBody().write(response);
         exchange.close();

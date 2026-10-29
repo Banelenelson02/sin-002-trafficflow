@@ -25,12 +25,15 @@ class IntersectionClientTest {
 
     @Test
     void fetchesAndDeserializesIntersections() throws Exception {
-        startServer(200, "[{\"id\":\"INT-1001\",\"district\":\"Downtown\","
-                + "\"signalType\":\"4-way\",\"active\":true}]");
+        startServer(
+                200,
+                "[{\"id\":\"INT-1001\",\"district\":\"Downtown\","
+                        + "\"signalType\":\"4-way\",\"active\":true}]"
+        );
 
         assertEquals(
                 new Intersection("INT-1001", "Downtown", "4-way", true),
-                new IntersectionClient().fetchIntersections().get(0)
+                new IntersectionClient(serverUrl()).fetchIntersections().get(0)
         );
     }
 
@@ -40,19 +43,35 @@ class IntersectionClientTest {
 
         IOException exception = assertThrows(
                 IOException.class,
-                () -> new IntersectionClient().fetchIntersections()
+                () -> new IntersectionClient(serverUrl()).fetchIntersections()
         );
 
-        assertEquals("Ingestion Service returned HTTP 503", exception.getMessage());
+        assertEquals(
+                "Ingestion Service returned HTTP 503",
+                exception.getMessage()
+        );
     }
 
     private void startServer(int status, String body) throws IOException {
-        server = HttpServer.create(new InetSocketAddress("localhost", 7020), 0);
-        server.createContext("/intersections", exchange -> respond(exchange, status, body));
+        server = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
+        server.createContext(
+                "/intersections",
+                exchange -> respond(exchange, status, body)
+        );
         server.start();
     }
 
-    private void respond(HttpExchange exchange, int status, String body) throws IOException {
+    private String serverUrl() {
+        return "http://localhost:"
+                + server.getAddress().getPort()
+                + "/intersections";
+    }
+
+    private void respond(
+            HttpExchange exchange,
+            int status,
+            String body
+    ) throws IOException {
         byte[] response = body.getBytes(StandardCharsets.UTF_8);
         exchange.sendResponseHeaders(status, response.length);
         exchange.getResponseBody().write(response);

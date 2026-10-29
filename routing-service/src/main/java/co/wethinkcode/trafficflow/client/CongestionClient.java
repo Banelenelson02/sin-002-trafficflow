@@ -11,14 +11,24 @@ import java.net.http.HttpResponse;
 
 public class CongestionClient {
 
-    private static final String URL = "http://localhost:7022/congestion";
+    private static final String DEFAULT_URL =
+            "http://localhost:7022/congestion";
 
+    private final String url;
     private final HttpClient httpClient = HttpClient.newHttpClient();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    public CongestionClient() {
+        this(DEFAULT_URL);
+    }
+
+    public CongestionClient(String url) {
+        this.url = url;
+    }
+
     public Congestion getCongestion() throws Exception {
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(URL))
+                .uri(URI.create(url))
                 .GET()
                 .build();
 

@@ -11,14 +11,23 @@ import java.net.http.HttpResponse;
 
 public class IntersectionClient {
 
-    private static final String BASE_URL = "http://localhost:7021";
+    private static final String DEFAULT_BASE_URL = "http://localhost:7021";
 
+    private final String baseUrl;
     private final HttpClient httpClient = HttpClient.newHttpClient();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    public IntersectionClient() {
+        this(DEFAULT_BASE_URL);
+    }
+
+    public IntersectionClient(String baseUrl) {
+        this.baseUrl = baseUrl;
+    }
+
     public Intersection getIntersection(String id) throws Exception {
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(BASE_URL + "/intersections/" + id))
+                .uri(URI.create(baseUrl + "/intersections/" + id))
                 .GET()
                 .build();
 
@@ -41,4 +50,3 @@ public class IntersectionClient {
         return objectMapper.readValue(response.body(), Intersection.class);
     }
 }
-

@@ -1,6 +1,7 @@
 
 package co.wethinkcode.trafficflow;
 
+import co.wethinkcode.trafficflow.client.CongestionClient;
 import co.wethinkcode.trafficflow.client.IntersectionClient;
 import co.wethinkcode.trafficflow.mq.CongestionSubscriber;
 import io.javalin.Javalin;
@@ -20,6 +21,16 @@ public class RoutingServiceApp {
                     "Could not start ActiveMQ subscriber: "
                             + e.getMessage());
             System.exit(1);
+        }
+
+        try {
+            int initialLevel = new CongestionClient().getCongestion().level();
+            congestionSubscriber.initializeCurrentLevel(initialLevel);
+        } catch (Exception e) {
+            System.err.println(
+                    "Could not load the initial congestion level from the "
+                            + "Congestion Service; using level 0 until the "
+                            + "next topic update: " + e.getMessage());
         }
 
         IntersectionClient intersectionClient = new IntersectionClient();

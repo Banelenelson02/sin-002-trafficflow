@@ -18,9 +18,32 @@ public class CongestionSubscriber {
 
     private final AtomicInteger currentLevel = new AtomicInteger(0);
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private boolean receivedUpdate;
 
     public int getCurrentLevel() {
         return currentLevel.get();
+    }
+
+    public synchronized void initializeCurrentLevel(int level) {
+        validateLevel(level);
+        if (!receivedUpdate) {
+            currentLevel.set(level);
+            System.out.println(
+                    "Initialized congestion level from snapshot: " + level);
+        }
+    }
+
+    synchronized void recordUpdate(int level) {
+        validateLevel(level);
+        currentLevel.set(level);
+        receivedUpdate = true;
+    }
+
+    private void validateLevel(int level) {
+        if (level < 0 || level > 8) {
+            throw new IllegalArgumentException(
+                    "Congestion level must be between 0 and 8");
+        }
     }
 
     public void start() throws Exception {
@@ -48,7 +71,7 @@ public class CongestionSubscriber {
 
                         if (congestion.level() >= 0
                                 && congestion.level() <= 8) {
-                            currentLevel.set(congestion.level());
+                            recordUpdate(congestion.level());
                             System.out.println(
                                     "Received congestion update: "
                                             + congestion.level());

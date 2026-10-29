@@ -324,3 +324,4 @@ If the Intersection Service stops sending heartbeats and the timeout passes, the
 ## Domain Concepts
 
 TrafficFlow models road intersections, districts, and signal types. The current routing endpoint focuses on intersection IDs, active status, congestion levels, and estimated travel time.
+WTC-5QF4JVHX
