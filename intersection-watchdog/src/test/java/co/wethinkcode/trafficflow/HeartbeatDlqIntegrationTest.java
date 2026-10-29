@@ -14,6 +14,7 @@ import javax.jms.Session;
 import javax.jms.TextMessage;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -37,9 +38,15 @@ class HeartbeatDlqIntegrationTest {
                 "Requires an ActiveMQ broker on " + MqConfig.BROKER_URL
         );
 
-        listener = new HeartbeatListener();
+        // Use unique destinations/markers so running services and other
+        // watchdog consumers cannot steal or acknowledge this test's messages.
+        String testId = UUID.randomUUID().toString().replace("-", "");
+        String queueName = MqConfig.HEARTBEAT_QUEUE + "-test-" + testId;
+        String messageType = MqConfig.HEARTBEAT_MESSAGE_TYPE + "-" + testId;
+
+        listener = new HeartbeatListener(queueName, messageType);
         listener.start();
-        sendMalformedHeartbeat();
+        sendMalformedHeartbeat(queueName, messageType);
 
         await(() -> listener.hasDeadLetteredHeartbeat(), Duration.ofSeconds(10));
 
@@ -47,18 +54,18 @@ class HeartbeatDlqIntegrationTest {
         assertTrue(listener.hasDeadLetteredHeartbeat());
     }
 
-    private void sendMalformedHeartbeat() throws Exception {
+    private void sendMalformedHeartbeat(String queueName, String messageType) throws Exception {
         ActiveMQConnectionFactory factory = new ActiveMQConnectionFactory(
                 MqConfig.BROKER_URL
         );
         try (Connection connection = factory.createConnection()) {
             Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
-            Queue queue = session.createQueue(MqConfig.HEARTBEAT_QUEUE);
+            Queue queue = session.createQueue(queueName);
             try (MessageProducer producer = session.createProducer(queue)) {
                 TextMessage message = session.createTextMessage("malformed heartbeat");
                 message.setStringProperty(
                         MqConfig.MESSAGE_TYPE_PROPERTY,
-                        MqConfig.HEARTBEAT_MESSAGE_TYPE
+                        messageType
                 );
                 producer.send(message);
             } finally {
