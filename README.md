@@ -3,9 +3,11 @@
 
 TrafficFlow is a Java-based urban traffic management project that models road intersections, congestion levels, and estimated travel times. It uses multiple REST services and ActiveMQ messaging to demonstrate communication between independent services.
 
-## Live Demonstration
+## Video Demonstration
 
-For a step-by-step Windows PowerShell walkthrough, expected results, speaking notes and trial-recording checklist, see the [TrafficFlow Live Demo Guide](DEMO_GUIDE.md).
+[Watch the TrafficFlow project presentation on YouTube](https://youtu.be/VDqt-orj1-A)
+
+For step-by-step Windows PowerShell setup and testing commands, see the [technical demo guide](DEMO_GUIDE.md).
 
 ## Project Status
 
