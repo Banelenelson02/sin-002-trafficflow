@@ -1,8 +1,7 @@
-
 package co.wethinkcode.trafficflow;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import io.javalin.Javalin;
-
 import java.util.Map;
 
 public class CongestionServiceApp {
@@ -13,39 +12,35 @@ public class CongestionServiceApp {
                 new CongestionController(new CongestionPublisher());
 
         Javalin app = Javalin.create().start(PORT);
-
         app.get("/health", ctx -> ctx.result("OK"));
-
-        app.get("/congestion", ctx -> {
-            Congestion congestion = new Congestion(controller.getLevel());
-            ctx.json(congestion);
-        });
+        app.get("/congestion", ctx -> ctx.json(new Congestion(controller.getLevel())));
 
         app.put("/congestion", ctx -> {
-            Map<String, Integer> requestBody = ctx.bodyAsClass(Map.class);
-            Integer level = requestBody.get("level");
+            JsonNode requestBody;
+            try {
+                requestBody = ctx.bodyAsClass(JsonNode.class);
+            } catch (Exception e) {
+                ctx.status(400).json(Map.of("error", "Request body must be valid JSON"));
+                return;
+            }
 
-            if (level == null || level < 0 || level > 8) {
-                ctx.status(400);
-                ctx.json(Map.of(
-                        "error", "Congestion level must be between 0 and 8"
-                ));
+            JsonNode levelNode = requestBody == null ? null : requestBody.get("level");
+            if (levelNode == null || !levelNode.isIntegralNumber()
+                    || !levelNode.canConvertToInt()
+                    || levelNode.intValue() < 0 || levelNode.intValue() > 8) {
+                ctx.status(400).json(Map.of(
+                        "error", "Congestion level must be an integer between 0 and 8"));
                 return;
             }
 
             try {
-                int updatedLevel = controller.updateLevel(level);
+                int updatedLevel = controller.updateLevel(levelNode.intValue());
                 ctx.json(new Congestion(updatedLevel));
             } catch (Exception e) {
-                System.err.println(
-                        "Failed to publish congestion update: " + e.getMessage()
-                );
-                ctx.status(502);
-                ctx.json(Map.of(
-                        "error", "Could not publish congestion update"
-                ));
+                System.err.println("Failed to publish congestion update: " + e.getMessage());
+                ctx.status(502).json(Map.of(
+                        "error", "Could not publish congestion update"));
             }
         });
     }
 }
-
