@@ -67,7 +67,7 @@ curl.exe http://localhost:7024/status
 Confirm the IDs actually exist and are active; otherwise choose IDs returned by ingestion. Then demonstrate a congestion update:
 
 ```powershell
-curl.exe -i -X PUT "http://localhost:7022/congestion" -H "Content-Type: application/json" -d '{\"level\":4}'
+Invoke-RestMethod -Method Put -Uri "http://localhost:7022/congestion" -ContentType "application/json" -Body (@{ level = 4 } | ConvertTo-Json)
 curl.exe "http://localhost:7023/route?from=INT-1001&to=INT-1005"
 ```
 
@@ -76,7 +76,7 @@ With level 4 and working event delivery, the simplified estimate is 30 minutes (
 Now try invalid input, which should return HTTP 400:
 
 ```powershell
-curl.exe -i -X PUT "http://localhost:7022/congestion" -H "Content-Type: application/json" -d '{\"level\":\"heavy\"}'
+Invoke-WebRequest -Method Put -Uri "http://localhost:7022/congestion" -ContentType "application/json" -Body (@{ level = "heavy" } | ConvertTo-Json)
 ```
 
 Finally, stop the Intersection Service, wait **more than 15 seconds**, and call the watchdog status again. It should report `DOWN` (HTTP 503). Restart Intersection Service and verify heartbeats return. The DLQ scenario is covered by an opt-in real-broker test, not by this simple stop/start demo.
